@@ -103,6 +103,15 @@ M=$(api GET "/v1/machines/$MACHINE")
 STATE=$(printf '%s' "$M" | jget state)
 [ -z "$STATE" ] && die "拿不到机器状态，原始响应: $(printf '%s' "$M" | head -c 300)"
 
+# 关键：变更类接口（suspend/start/wake/exec）只认 machine id，
+# 用名字（box-1）会返回 not_found machine not found。这里解析一次，后面全用 id。
+MID=$(printf '%s' "$M" | jget id)
+if [ -n "$MID" ]; then
+  MACHINE="$MID"
+else
+  die "机器响应里没有 id 字段，无法继续"
+fi
+
 RUN_STARTED=$(printf '%s' "$M" | jget runStartedAt)
 COOLDOWN=$(printf '%s' "$M" | jget cooldownUntil)
 MAXRUN=$(printf '%s' "$M" | jget maxRunMinutes)

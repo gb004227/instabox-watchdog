@@ -55,6 +55,11 @@ log "=== [0/5] 确认机器状态 ==="
 M=$(api GET "/v1/machines/$MACHINE")
 STATE=$(printf '%s' "$M" | jget state)
 log "state=$STATE"
+
+# 变更类接口只认 machine id，用名字会 not_found → 解析一次后全程用 id
+MID=$(printf '%s' "$M" | jget id)
+[ -n "$MID" ] && MACHINE="$MID"
+log "machineId=$MACHINE"
 if [ "$STATE" != "running" ]; then
   # 实测：suspended 状态下 wake 会报 machine_not_running，必须用 start
   log "→ start"
