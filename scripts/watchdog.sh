@@ -217,7 +217,7 @@ if [ "$ELAPSED" -ge "$THRESH" ]; then
 fi
 
 # 4. 健康检查：一条轻量 exec（同步返回 stdout），确认容器还活着
-HEALTH_CMD='cd /data/xmcloud 2>/dev/null && docker compose ps --format "{{.Name}}:{{.State}}" 2>/dev/null | tr "\n" " " || echo NO_DIR'
+HEALTH_CMD='cd /data/xmcloud 2>/dev/null && docker compose ps -a --format "{{.Name}}:{{.State}}" 2>/dev/null | tr "\n" " " || echo NO_DIR'
 HEALTH=$(api POST "/v1/machines/$MACHINE/exec" "$(python3 -c 'import json,sys;print(json.dumps({"cmd":sys.argv[1]}))' "$HEALTH_CMD")")
 OUT=$(printf '%s' "$HEALTH" | jget stdout)
 ERR=$(printf '%s' "$HEALTH" | jget error.code)
@@ -237,13 +237,16 @@ esac
 
 if [ "$need_fix" = "1" ] && [ -z "$ERR" ]; then
   log "服务不完整 → 自动重装（docker compose up -d）"
-  FIX=$(api POST "/v1/machines/$MACHINE/exec" "$(python3 -c 'import json,sys;print(json.dumps({"cmd":sys.argv[1]}))' 'cd /data/xmcloud && docker compose up -d 2>&1 | tail -5')")
+  UP_CMD='cd /data/xmcloud && docker compose up -d 2>&1 | tail -5'
+  FIX=$(api POST "/v1/machines/$MACHINE/exec" "$(python3 -c 'import json,sys;print(json.dumps({"cmd":sys.argv[1]}))' "$UP_CMD")")
   log "  up: $(printf '%s' "$FIX" | jget stdout | tr '\n' ' ' | head -c 300)"
-  # 等就绪（最多 150 秒）
+  # 等就绪（最多 150 秒）。注意：命令必须先赋给变量再传，直接内联嵌套引号
+  # 会被远端 eval 解析成 unexpected EOF（实测踩过）。
+  PROBE_CMD='curl -s -o /dev/null -w "%{http_code}" -m 5 http://127.0.0.1:8090/ ; echo -n " " ; curl -s -o /dev/null -w "%{http_code}" -m 5 http://127.0.0.1:3000/'
   ok=0
   for i in $(seq 1 15); do
     sleep 10
-    P=$(api POST "/v1/machines/$MACHINE/exec" "$(python3 -c 'import json,sys;print(json.dumps({"cmd":sys.argv[1]}))' 'curl -s -o /dev/null -w "%{http_code}" -m 5 http://127.0.0.1:8090/ ; echo -n " " ; curl -s -o /dev/null -w "%{http_code}" -m 5 http://127.0.0.1:3000/"')")
+    P=$(api POST "/v1/machines/$MACHINE/exec" "$(python3 -c 'import json,sys;print(json.dumps({"cmd":sys.argv[1]}))' "$PROBE_CMD")")
     CODES=$(printf '%s' "$P" | jget stdout | tr -d '\r\n')
     log "  探测[$i]: ${CODES:-?}"
     case "$CODES" in
