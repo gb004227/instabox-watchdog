@@ -1,0 +1,19 @@
+name: cron probe
+
+# 诊断用：只验证本仓库的 schedule 触发器到底会不会被执行。
+# 如果这个也不跑，说明是账号/仓库层面的定时器问题，与 watchdog 脚本无关。
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 打点
+        run: echo "cron fired at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
