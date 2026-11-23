@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小爱音箱控制台</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔊</text></svg>">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg: #0b0e14;
+    --surface: #121722;
+    --surface-2: #1a2130;
+    --surface-3: #222b3d;
+    --border: #232c3e;
+    --text: #e6ebf5;
+    --muted: #8892a6;
+    --accent: #4d8dff;
+    --accent-dim: rgba(77, 141, 255, 0.14);
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --err: #f87171;
+    --mono: ui-monospace, "Cascadia Code", Consolas, "Courier New", monospace;
+  }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ══════ 顶栏 ══════ */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 20px;
+    height: 58px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+  }
+
+  .brand-icon {
+    width: 26px; height: 26px;
+    display: grid; place-items: center;
+    background: var(--accent-dim);
+    border: 1px solid rgba(77, 141, 255, 0.3);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+
+  .status-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .dot.on {
+    background: var(--ok);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.16);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  .dot.off { background: var(--err); box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.16); }
+  .dot.wait { background: var(--warn); box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.16); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+
+  .chip {
+    padding: 3px 9px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* ══════ 布局 ══════ */
+  .layout {
+    display: flex;
+    height: calc(100% - 58px);
+    min-height: 0;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* ══════ 对话流 ══════ */
+  .feed {
+    flex: 1;
+    overflow-y: auto;
+    padding: 22px 24px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    scroll-behavior: smooth;
+  }
+
+  .empty {
+    margin: auto;
+    text-align: center;
+    color: var(--muted);
+    line-height: 2;
+    font-size: 13px;
+  }
+  .empty strong { color: var(--text); font-weight: 600; }
+  .empty kbd {
+    display: inline-block;
+    padding: 1px 7px;
+    margin: 0 2px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  .row { display: flex; flex-direction: column; max-width: 78%; }
+  .row.user { align-self: flex-end; align-items: flex-end; }
+  .row.ai { align-self: flex-start; align-items: flex-start; }
+
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 5px;
+    font-size: 11.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tag {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .tag.ai { background: var(--accent-dim); color: #7fb0ff; border: 1px solid rgba(77,141,255,.28); }
+  .tag.native { background: rgba(136,146,166,.12); color: var(--muted); border: 1px solid var(--border); }
+  .tag.music { background: rgba(230,66,66,.14); color: #ff8f8f; border: 1px solid rgba(230,66,66,.3); }
+
+  .bubble {
+    padding: 10px 14px;
+    border-radius: 13px;
+    line-height: 1.62;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .row.user .bubble {
+    background: var(--accent);
+    color: #fff;
+    border-bottom-right-radius: 5px;
+    box-shadow: 0 2px 10px rgba(77, 141, 255, 0.22);
+  }
+
+  .row.ai .bubble {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 5px;
+  }
+
+  .row.ai .bubble.failed {
+    border-color: rgba(248, 113, 113, 0.45);
+    background: rgba(248, 113, 113, 0.07);
+  }
+
+  .bubble-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .row:hover .bubble-actions { opacity: 1; }
+  .bubble-actions button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0;
+    font-size: 11.5px;
+    font-family: inherit;
+  }
+  .bubble-actions button:hover { color: var(--accent); }
+
+  .hint-native {
+    margin-top: 5px;
+    font-size: 11.5px;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* ══════ 日志抽屉 ══════ */
+  .logs {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .logs-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 20px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .logs-head:hover { color: var(--text); }
+
+  .logs-head .arrow {
+    display: inline-block;
+    transition: transform 0.18s;
+    font-size: 10px;
+  }
+  .logs.open .arrow { transform: rotate(90deg); }
+
+  .logs-count {
+    margin-left: auto;
+    font-size: 11.5px;
+    font-family: var(--mono);
+  }
+
+  .logs-body {
+    display: none;
+    max-height: 210px;
+    overflow-y: auto;
+    padding: 0 20px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.75;
+  }
+  .logs.open .logs-body { display: block; }
+
+  .log-line { display: flex; gap: 10px; }
+  .log-time { color: #5b6478; flex-shrink: 0; }
+  .log-text { word-break: break-word; }
+  .log-line.warn .log-text { color: var(--warn); }
+  .log-line.error .log-text { color: var(--err); }
+
+  /* ══════ 配置面板 ══════ */
+  .panel {
+    width: 344px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .panel-head {
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-head h2 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+
+  .field label {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .field label .tip {
+    margin-left: auto;
+    font-size: 11px;
+    color: #5b6478;
+    font-family: var(--mono);
+  }
+
+  /* 「全部接管」复选框行 */
+  .check-row {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 8px;
+    padding: 9px 11px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .check-row input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    margin-top: 3px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .check-row .hint {
+    display: block;
+    color: #5b6478;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .field-note {
+    font-size: 11px;
+    color: #5b6478;
+    line-height: 1.6;
+    min-height: 0;
+  }
+
+  .field-note b { color: var(--accent); font-weight: 600; }
+
+  input:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  input, textarea, select {
+    width: 100%;
+    padding: 8px 11px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  input:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+
+  input::placeholder, textarea::placeholder { color: #4a5266; }
+
+  textarea { resize: vertical; min-height: 76px; line-height: 1.6; }
+
+  .row-inline { display: flex; gap: 8px; }
+
+  .btn {
+    padding: 9px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.06s;
+    white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: var(--surface-3); }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .btn.primary:hover:not(:disabled) { background: #3d7bee; }
+
+  .btn.ghost { background: transparent; }
+
+  .panel-foot {
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .result {
+    font-size: 12px;
+    line-height: 1.6;
+    padding: 8px 11px;
+    border-radius: 7px;
+    display: none;
+    word-break: break-word;
+  }
+  .result.show { display: block; }
+  .result.ok { background: rgba(52, 211, 153, 0.1); color: var(--ok); border: 1px solid rgba(52, 211, 153, 0.3); }
+  .result.err { background: rgba(248, 113, 113, 0.1); color: var(--err); border: 1px solid rgba(248, 113, 113, 0.3); }
+
+  .dirty-note {
+    font-size: 11.5px;
+    color: var(--warn);
+    display: none;
+    align-items: center;
+    gap: 6px;
+  }
+  .dirty-note.show { display: flex; }
+
+  /* ══════ 滚动条 ══════ */
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #2b3549;
+    border-radius: 5px;
+    border: 2px solid var(--bg);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4660; }
+
+  /* ══════ 小屏 ══════ */
+  @media (max-width: 880px) {
+    .layout { flex-direction: column; }
+    .panel {
+      width: 100%;
+      border-left: none;
+      border-top: 1px solid var(--border);
+      max-height: 46%;
+    }
+    .row { max-width: 92%; }
+    .feed { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-icon">🔊</span>
+    <span>小爱控制台</span>
+  </div>
+  <div class="status-group">
+    <span class="dot wait" id="dot"></span>
+    <span id="status-text">连接中…</span>
+    <span class="chip" id="device-chip" style="display:none"></span>
+    <span class="chip" id="uptime-chip" style="display:none"></span>
+  </div>
+</header>
+
+<div class="layout">
+  <main class="main">
+    <div class="feed" id="feed">
+      <div class="empty" id="empty">
+        对着音箱说话，这里会实时显示对话<br><br>
+        试试 <kbd>你是什么模型</kbd> <kbd>请讲个笑话</kbd><br>
+        <span style="font-size:12px;opacity:.7">放在「请」或「你」开头的句子会交给大模型</span>
+      </div>
+    </div>
+
+    <section class="logs" id="logs">
+      <div class="logs-head" id="logs-head">
+        <span class="arrow">▶</span>
+        <span>运行日志</span>
+        <span class="logs-count" id="logs-count">0</span>
+      </div>
+      <div class="logs-body" id="logs-body"></div>
+    </section>
+  </main>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <h2>模型配置</h2>
+      <span class="chip" id="override-chip" style="display:none;margin-left:auto">已验证配置</span>
+    </div>
+
+    <div class="panel-body">
+      <div class="field">
+        <label>模型名称</label>
+        <input id="f-model" placeholder="deepseek-flash" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="field">
+        <label>Base URL <span class="tip">兼容 OpenAI 协议</span></label>
+        <input id="f-baseurl" placeholder="https://api.deepseek.com" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="field">
+        <label>API Key <span class="tip" id="key-tip"></span></label>
+        <div class="row-inline">
+          <input id="f-apikey" type="password" placeholder="留空则不修改" autocomplete="off" spellcheck="false">
+          <button class="btn ghost" id="btn-toggle-key" title="显示/隐藏" style="padding:8px 11px">👁</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>系统提示词 <span class="tip">决定说话风格</span></label>
+        <textarea id="f-prompt" placeholder="你是一个中文语音助手…"></textarea>
+      </div>
+
+      <div class="field">
+        <label>网易云音源 <span class="tip" id="ne-tip">游客模式</span></label>
+        <input id="f-netease" type="password" placeholder="粘贴 MUSIC_U cookie 值，留空则不修改" autocomplete="off" spellcheck="false">
+        <div class="row-inline">
+          <button class="btn" id="btn-ne-save" style="flex:1">登录网易云</button>
+          <button class="btn ghost" id="btn-ne-logout" style="flex:1;display:none">退出登录</button>
+        </div>
+        <div class="row-inline">
+          <input id="f-ne-search" placeholder="歌名，留空 = 随机放一首" autocomplete="off" spellcheck="false">
+          <button class="btn ghost" id="btn-ne-play" title="从网易云点播" style="padding:8px 11px">▶</button>
+        </div>
+        <div class="field-note" id="ne-note">
+          说「播放晴天」「放首歌」即点播。游客曲库多为翻唱版；登录后走完整正版曲库（VIP 歌曲需账号有会员）。
+          获取 cookie：浏览器登录 music.163.com → F12 → Application → Cookies → 复制 MUSIC_U 的值。
+        </div>
+      </div>
+
+      <div class="field">
+        <label>xiaomusic 音源 <span class="tip" id="xm-tip">检测中…</span></label>
+        <div class="row-inline">
+          <span class="tip" id="xm-now" style="flex:1">—</span>
+        </div>
+        <div class="row-inline">
+          <input id="f-xm-search" placeholder="歌名，留空 = 随机放一首" autocomplete="off" spellcheck="false">
+          <button class="btn ghost" id="btn-xm-play" title="从曲库/下载点播" style="padding:8px 11px">▶</button>
+        </div>
+        <div class="row-inline">
+          <button class="btn ghost" id="btn-xm-next" style="flex:1">下一首</button>
+          <button class="btn ghost" id="btn-xm-stop" style="flex:1">停止</button>
+          <button class="btn ghost" id="btn-xm-refresh" style="flex:1" title="重新扫描本地曲库目录">刷新曲库</button>
+        </div>
+        <div class="field-note" id="xm-note">
+          说「播放歌名」由 xiaomusic 通过 B 站搜索下载后播放（全曲库免费，首次播放需下载等一会）。
+          「暂停/下一首/音量」等口令同样支持。服务地址见 config.js 的 music.xiaomusicUrl。
+        </div>
+      </div>
+
+      <div class="field">
+        <label>触发方式 <span class="tip">决定哪些话交给大模型</span></label>        <label class="check-row">
+          <input type="checkbox" id="f-catchall">
+          <span>全部接管<span class="hint">说什么都问大模型（音量、放歌等原生指令会自动让路）</span></span>
+        </label>
+        <input id="f-keywords" placeholder="请, 你, 帮, 讲…" autocomplete="off" spellcheck="false">
+        <div class="field-note" id="kw-note"></div>
+      </div>
+
+      <div class="field">
+        <label>轮询间隔 <span class="tip">毫秒，越小越快</span></label>
+        <input id="f-heartbeat" type="number" min="1000" max="60000" step="500" placeholder="3000">
+      </div>
+
+      <div class="result" id="result"></div>
+    </div>
+
+    <div class="panel-foot">
+      <div class="dirty-note" id="dirty-note">● 有未保存的修改</div>
+      <button class="btn ghost" id="btn-say">🔊 让音箱念一句</button>
+      <div class="row-inline">
+        <button class="btn" id="btn-test" style="flex:1">测试连接</button>
+        <button class="btn primary" id="btn-save" style="flex:1.4">保存并重启</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const feed = $("feed");
+  const logsBox = $("logs");
+  const logsBody = $("logs-body");
+
+  let logCount = 0;
+  let dirty = false;
+  let connected = false;
+  let startedAt = null;
+  let lastUserNode = null;   // 用于判断 AI 是否接手
+  let lastUserTimer = null;
+
+  /* ══════ 工具 ══════ */
+  const pad = (n) => String(n).padStart(2, "0");
+  const hhmmss = (t) => {
+    const d = new Date(t);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+
+  function scrollFeed(force) {
+    const nearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 160;
+    if (force || nearBottom) feed.scrollTop = feed.scrollHeight;
+  }
+
+  function hideEmpty() {
+    const e = $("empty");
+    if (e) e.remove();
+  }
+
+  /* ══════ 渲染 ══════ */
+  function addUser(text, time) {
+    hideEmpty();
+    clearTimeout(lastUserTimer);
+
+    const row = document.createElement("div");
+    row.className = "row user";
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = hhmmss(time);
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = text;
+
+    row.append(meta, bubble);
+    feed.appendChild(row);
+    scrollFeed(true);
+
+    lastUserNode = row;
+
+    // 3.2 秒内没有 AI 回答 → 说明这条交给小爱原生处理了
+    lastUserTimer = setTimeout(() => {
+      if (lastUserNode !== row) return;
+      const hint = document.createElement("div");
+      hint.className = "hint-native";
+      hint.textContent = "↳ 由小爱原生处理";
+      row.appendChild(hint);
+      scrollFeed(false);
+    }, 3200);
+  }
+
+  function addAI(text, time, ok, ms, latency) {
+    hideEmpty();
+    clearTimeout(lastUserTimer);
+    lastUserNode = null;
+
+    const row = document.createElement("div");
+    row.className = "row ai";
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+
+    const tag = document.createElement("span");
+    tag.className = ok ? "tag ai" : "tag native";
+    tag.textContent = ok ? "大模型" : "播报失败";
+
+    const t = document.createElement("span");
+    if (latency) {
+      const s = (latency / 1000).toFixed(1);
+      t.textContent = `${hhmmss(time)} · ${s}s 响应`;
+      // 超过 4 秒说明轮询间隔拖了后腿，标黄提醒
+      if (latency > 4000) t.style.color = "var(--warn)";
+    } else {
+      t.textContent = hhmmss(time) + (ms ? ` · ${ms}ms` : "");
+    }
+
+    meta.append(tag, t);
+
+    const bubble = document.createElement("div");
+    bubble.className = ok ? "bubble" : "bubble failed";
+    bubble.textContent = text;
+
+    const actions = document.createElement("div");
+    actions.className = "bubble-actions";
+    const copyBtn = document.createElement("button");
+    copyBtn.textContent = "复制";
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.textContent = "已复制";
+        setTimeout(() => (copyBtn.textContent = "复制"), 1200);
+      });
+    };
+    actions.appendChild(copyBtn);
+
+    row.append(meta, bubble, actions);
+    feed.appendChild(row);
+    scrollFeed(false);
+  }
+
+  /** 网易云点播卡片 */
+  function addMusic(title, artist, time, ok, ms, mode, cover) {
+    hideEmpty();
+    clearTimeout(lastUserTimer);
+    lastUserNode = null;
+
+    const row = document.createElement("div");
+    row.className = "row ai";
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+
+    const tag = document.createElement("span");
+    tag.className = "tag music";
+    tag.textContent = ok ? `网易云 · ${mode}` : "点播失败";
+
+    const t = document.createElement("span");
+    t.textContent = hhmmss(time) + (ms ? ` · ${(ms / 1000).toFixed(1)}s` : "");
+
+    meta.append(tag, t);
+
+    const bubble = document.createElement("div");
+    bubble.className = ok ? "bubble" : "bubble failed";
+    bubble.textContent = `🎵 ${title} — ${artist}${cover ? "（翻唱版）" : ""}`;
+
+    row.append(meta, bubble);
+    feed.appendChild(row);
+    scrollFeed(false);
+  }
+
+  function addLog(level, text, time) {
+    logCount++;
+    $("logs-count").textContent = logCount;
+
+    const line = document.createElement("div");
+    line.className = "log-line " + (level === "warn" ? "warn" : level === "error" ? "error" : "");
+
+    const t = document.createElement("span");
+    t.className = "log-time";
+    t.textContent = hhmmss(time);
+
+    const m = document.createElement("span");
+    m.className = "log-text";
+    m.textContent = text;
+
+    line.append(t, m);
+    logsBody.appendChild(line);
+
+    // 只保留最近 300 行
+    while (logsBody.childElementCount > 300) logsBody.removeChild(logsBody.firstChild);
+    logsBody.scrollTop = logsBody.scrollHeight;
+  }
+
+  function setStatus(st) {
+    const dot = $("dot");
+    const txt = $("status-text");
+    const dev = $("device-chip");
+    const up = $("uptime-chip");
+
+    if (!connected) {
+      dot.className = "dot off";
+      txt.textContent = "控制台已断开";
+      return;
+    }
+
+    if (st.running) {
+      dot.className = "dot on";
+      txt.textContent = "监听中";
+    } else if (st.reason === "restarting") {
+      dot.className = "dot wait";
+      txt.textContent = "正在应用配置…";
+    } else if (st.error) {
+      dot.className = "dot off";
+      txt.textContent = "启动失败";
+    } else {
+      dot.className = "dot wait";
+      txt.textContent = "未运行";
+    }
+
+    if (st.device) {
+      dev.textContent = st.device;
+      dev.style.display = "";
+    }
+    if (st.running) {
+      startedAt = Date.now();
+      up.style.display = "";
+    } else {
+      startedAt = null;
+      up.style.display = "none";
+    }
+  }
+
+  setInterval(() => {
+    if (!startedAt) return;
+    const s = Math.floor((Date.now() - startedAt) / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    $("uptime-chip").textContent = h > 0 ? `运行 ${h}h${pad(m)}m` : `运行 ${m}m${pad(s % 60)}s`;
+  }, 1000);
+
+  /* ══════ SSE ══════ */
+  function connect() {
+    const es = new EventSource("/api/events");
+
+    es.onopen = () => {
+      connected = true;
+      setStatus({ running: true });
+    };
+
+    es.onmessage = (ev) => {
+      let e;
+      try {
+        e = JSON.parse(ev.data);
+      } catch {
+        return;
+      }
+
+      switch (e.type) {
+        case "user":
+          addUser(e.text, e.time);
+          break;
+        case "ai":
+          addAI(e.text, e.time, e.ok, e.ms, e.latency);
+          break;
+        case "music":
+          addMusic(e.title, e.artist, e.time, e.ok, e.ms, e.mode, e.cover);
+          break;
+        case "log":
+          addLog(e.level, e.text, e.time);
+          break;
+        case "status":
+          setStatus(e);
+          break;
+      }
+    };
+
+    es.onerror = () => {
+      connected = false;
+      setStatus({});
+      // EventSource 会自动重连
+    };
+  }
+
+  /* ══════ 配置面板 ══════ */
+  const FIELDS = {
+    model: $("f-model"),
+    baseURL: $("f-baseurl"),
+    apiKey: $("f-apikey"),
+    prompt: $("f-prompt"),
+    keywords: $("f-keywords"),
+    catchAll: $("f-catchall"),
+    heartbeat: $("f-heartbeat"),
+  };
+
+  /** config.js 里的出厂词表，取消「全部接管」时用它回填 */
+  let DEFAULT_KEYWORDS = [];
+
+  /** 关键词说明：明确告诉用户是「句首」匹配，不是包含 */
+  function updateKwNote() {
+    const note = $("kw-note");
+    if (!note) return;
+    if (FIELDS.catchAll.checked) {
+      FIELDS.keywords.disabled = true;
+      note.innerHTML =
+        "当前：<b>全部接管</b>。说任何话都会交给大模型，只有音量、播放、闹钟这类原生指令会让路给小爱。";
+    } else {
+      FIELDS.keywords.disabled = false;
+      const n = FIELDS.keywords.value.split(/[,，\s]+/).filter(Boolean).length;
+      note.innerHTML = n
+        ? `当前：<b>句首命中</b>，只有开头是这 ${n} 个词之一才走大模型。` +
+          `注意是句首匹配 ——「我想请问」不算，「请问」才算。`
+        : `当前：<b>未填词</b>，保存后会退回出厂词表（${DEFAULT_KEYWORDS.length} 个），也就是你现在这套规则。`;
+    }
+  }
+
+  function fillForm(cfg) {
+    FIELDS.model.value = cfg.model ?? "";
+    FIELDS.baseURL.value = cfg.baseURL ?? "";
+    FIELDS.apiKey.value = "";
+    FIELDS.apiKey.placeholder = cfg.hasApiKey ? `当前：${cfg.apiKeyMasked}` : "未配置，请填写";
+    $("key-tip").textContent = cfg.hasApiKey ? "已配置" : "缺失";
+    FIELDS.prompt.value = cfg.systemPrompt ?? "";
+
+    const kw = cfg.callAIKeywords ?? [];
+    const catchAll = Boolean(cfg.catchAll) || (kw.length === 1 && kw[0] === "*");
+    if (Array.isArray(cfg.defaultKeywords) && cfg.defaultKeywords.length) {
+      DEFAULT_KEYWORDS = cfg.defaultKeywords;
+    }
+    FIELDS.catchAll.checked = catchAll;
+    FIELDS.keywords.value = catchAll ? "" : kw.join(", ");
+    updateKwNote();
+
+    FIELDS.heartbeat.value = cfg.heartbeat ?? 1000;
+    markClean();
+  }
+
+  function collect() {
+    const body = {
+      model: FIELDS.model.value.trim(),
+      baseURL: FIELDS.baseURL.value.trim(),
+      systemPrompt: FIELDS.prompt.value.trim(),
+      // "*" = 全部接管（后端翻成 [""]）；空数组 = 退回出厂词表
+      callAIKeywords: FIELDS.catchAll.checked
+        ? ["*"]
+        : FIELDS.keywords.value.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean),
+      heartbeat: Number(FIELDS.heartbeat.value) || 1000,
+    };
+    const key = FIELDS.apiKey.value.trim();
+    if (key) body.apiKey = key;
+    return body;
+  }
+
+  function markDirty() {
+    dirty = true;
+    $("dirty-note").classList.add("show");
+  }
+
+  function markClean() {
+    dirty = false;
+    $("dirty-note").classList.remove("show");
+  }
+
+  Object.values(FIELDS).forEach((el) => el.addEventListener("input", markDirty));
+
+  // 勾选「全部接管」时清空并禁用输入框；取消勾选时把出厂词表填回去，
+  // 保证「勾上再取消」能完整退回原来的规则，不会留下空输入框
+  FIELDS.catchAll.addEventListener("change", () => {
+    if (FIELDS.catchAll.checked) {
+      FIELDS.keywords.value = "";
+    } else if (!FIELDS.keywords.value.trim()) {
+      FIELDS.keywords.value = DEFAULT_KEYWORDS.join(", ");
+    }
+    updateKwNote();
+    markDirty();
+  });
+
+  FIELDS.keywords.addEventListener("input", () => {
+    updateKwNote();
+    markDirty();
+  });
+
+  $("btn-toggle-key").onclick = () => {
+    FIELDS.apiKey.type = FIELDS.apiKey.type === "password" ? "text" : "password";
+  };
+
+  function showResult(ok, text) {
+    const r = $("result");
+    r.className = "result show " + (ok ? "ok" : "err");
+    r.textContent = text;
+  }
+
+  /* ══════ 网易云 ══════ */
+  async function loadNetease() {
+    try {
+      const ne = await fetch("/api/netease").then((r) => r.json());
+      const vipTxt = ne.vipType > 0 ? " · VIP" : "";
+      $("ne-tip").textContent = ne.hasCookie ? `已登录 · ${ne.nickname}${vipTxt}` : "游客模式";
+      $("btn-ne-logout").style.display = ne.hasCookie ? "" : "none";
+    } catch {
+      /* 服务未就绪时静默 */
+    }
+  }
+
+  $("btn-ne-save").onclick = async () => {
+    const btn = $("btn-ne-save");
+    const v = $("f-netease").value.trim();
+    if (!v) return showResult(false, "先粘贴 MUSIC_U cookie 的值");
+    btn.disabled = true;
+    btn.textContent = "验证中…";
+    try {
+      const r = await fetch("/api/netease/cookie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookie: v }),
+      }).then((r) => r.json());
+      if (r.ok) {
+        $("f-netease").value = "";
+        showResult(true, `✅ 网易云已登录：${r.nickname}，说「播放歌名」试试`);
+        loadNetease();
+      } else {
+        showResult(false, `❌ ${r.error}`);
+      }
+    } catch (e) {
+      showResult(false, "❌ " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "登录网易云";
+    }
+  };
+
+  $("btn-ne-logout").onclick = async () => {
+    await fetch("/api/netease/logout", { method: "POST" });
+    showResult(true, "已退出网易云登录，回到游客模式");
+    loadNetease();
+  };
+
+  $("btn-ne-play").onclick = async () => {
+    const btn = $("btn-ne-play");
+    const kw = $("f-ne-search").value.trim();
+    btn.disabled = true;
+    btn.textContent = "…";
+    try {
+      const r = await fetch("/api/music", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: kw }),
+      }).then((r) => r.json());
+      showResult(r.ok, r.ok ? "✅ 已下发到音箱，注意听" : `❌ ${r.error ?? "没找到可播放的版本，看运行日志"}`);
+      if (r.ok) $("f-ne-search").value = "";
+    } catch (e) {
+      showResult(false, "❌ " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "▶";
+    }
+  };
+
+  /* ══════ xiaomusic ══════ */
+  function fmtSec(s) {
+    s = Math.max(0, Math.floor(s ?? 0));
+    const m = Math.floor(s / 60);
+    return `${m}:${pad(s % 60)}`;
+  }
+
+  async function refreshXm() {
+    try {
+      const st = await fetch("/api/xiaomusic").then((r) => r.json());
+      if (!st.online) {
+        $("xm-tip").textContent = "服务未连接";
+        $("xm-now").textContent = "—";
+        return;
+      }
+      $("xm-tip").textContent = `已连接 · v${st.version} · 曲库 ${st.songCount} 首`;
+      const prog = st.isPlaying ? `${fmtSec(st.offset)}/${fmtSec(st.duration)}` : "已停止";
+      $("xm-now").textContent = st.curMusic
+        ? `♪ ${st.curMusic} · ${prog}`
+        : "未在播放";
+    } catch {
+      $("xm-tip").textContent = "服务未连接";
+    }
+  }
+
+  async function xmPost(action, payload) {
+    const r = await fetch(`/api/xiaomusic/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload ?? {}),
+    }).then((r) => r.json());
+    if (!r.ok) showResult(false, `❌ ${r.error ?? "操作失败"}`);
+    return r;
+  }
+
+  $("btn-xm-play").onclick = async () => {
+    const btn = $("btn-xm-play");
+    const kw = $("f-xm-search").value.trim();
+    btn.disabled = true;
+    btn.textContent = "…";
+    try {
+      const r = await xmPost("play", { keyword: kw });
+      if (r.ok) {
+        $("f-xm-search").value = "";
+        showResult(true, "✅ 已下发到 xiaomusic（没下载过的歌会先下载，稍等片刻）");
+      }
+    } catch (e) {
+      showResult(false, "❌ " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "▶";
+    }
+  };
+
+  $("btn-xm-next").onclick = () => xmPost("cmd", { cmd: "下一首" }).then(refreshXm);
+  $("btn-xm-stop").onclick = () => xmPost("stop").then(refreshXm);
+  $("btn-xm-refresh").onclick = () =>
+    xmPost("refreshlist").then((r) => {
+      if (r.ok) showResult(true, "✅ 曲库已重新扫描");
+      refreshXm();
+    });
+
+  setInterval(refreshXm, 5000);
+
+  $("btn-say").onclick = async () => {
+    const btn = $("btn-say");
+    btn.disabled = true;
+    btn.textContent = "播报中…";
+    try {
+      const r = await fetch("/api/say", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "控制台连接正常，我是你的语音助手" }),
+      });
+      const d = await r.json();
+      if (d.ok) showResult(true, "✅ 指令已发出，注意听音箱");
+      else showResult(false, `❌ ${d.error ?? "播报被拒"}`);
+    } catch (e) {
+      showResult(false, "❌ " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "🔊 让音箱念一句";
+    }
+  };
+
+  $("btn-test").onclick = async () => {
+    const btn = $("btn-test");
+    btn.disabled = true;
+    btn.textContent = "测试中…";
+    try {
+      const r = await fetch("/api/test-model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collect()),
+      });
+      const d = await r.json();
+      if (d.ok) showResult(true, `✅ 连接正常，模型回了「${d.content}」`);
+      else showResult(false, `❌ ${d.error ?? "失败"}${d.status ? ` (HTTP ${d.status})` : ""}`);
+    } catch (e) {
+      showResult(false, "❌ " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "测试连接";
+    }
+  };
+
+  $("btn-save").onclick = async () => {
+    const btn = $("btn-save");
+    const hadKeyInput = Boolean(FIELDS.apiKey.value.trim());
+    btn.disabled = true;
+    btn.textContent = "保存中…";
+    try {
+      const r = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collect()),
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error ?? "保存失败");
+
+      fillForm(d.state.config);
+      if (hadKeyInput) FIELDS.apiKey.placeholder = `当前：${d.state.config.apiKeyMasked}`;
+
+      showResult(true, "✅ 已保存，正在重启服务…");
+      await fetch("/api/restart", { method: "POST" });
+      setTimeout(() => showResult(true, "✅ 新配置已生效"), 2500);
+    } catch (e) {
+      showResult(false, "❌ " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "保存并重启";
+    }
+  };
+
+  /* ══════ 日志抽屉 ══════ */
+  $("logs-head").onclick = () => logsBox.classList.toggle("open");
+
+  /* ══════ 初始化 ══════ */
+  fetch("/api/state")
+    .then((r) => r.json())
+    .then((s) => {
+      fillForm(s.config);
+      setStatus(s.status);
+      if (s.hasOverride) $("override-chip").style.display = "";
+    })
+    .catch(() => {});
+
+  connect();
+  loadNetease();
+  refreshXm();
+
+  // 离开页面前提醒未保存
+  window.addEventListener("beforeunload", (e) => {
+    if (dirty) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+})();
+</script>
+</body>
+</html>

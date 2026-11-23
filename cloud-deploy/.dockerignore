@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+data/
+xiaoai-migpt/node_modules
+xiaoai-migpt/.git
+xiaoai-migpt/.mi.json
+xiaoai-migpt/*.log
+*.log
+.git

@@ -1,0 +1,26 @@
+# xiaomusic 0.6.1 —— 音箱音乐服务（容器内监听 8090）
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    TZ=Asia/Shanghai \
+    XIAOMUSIC_PORT=8090
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ffmpeg \
+      curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir xiaomusic==0.6.1
+
+# 本地版 device_player.py 带 4 处 PATCH（B站下载竞态/TTS 定时器判断），
+# 官方 wheel 没有这些修复，必须覆盖，否则云端播放会卡在 TTS 竞态
+COPY patches/device_player.py /usr/local/lib/python3.11/site-packages/xiaomusic/device_player.py
+
+WORKDIR /app
+COPY xiaomusic-config.template.json /app/config.template.json
+COPY entrypoint-xiaomusic.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+VOLUME ["/app/music", "/app/conf"]
+EXPOSE 8090
+ENTRYPOINT ["/app/entrypoint.sh"]

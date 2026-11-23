@@ -1,0 +1,19 @@
+# 绝不入库的东西
+.env
+*.env.local
+data/
+_test/
+*.log
+*.bak.*
+
+# 小米登录态（走 Secret 或快照，不入库）
+**/auth.json
+**/.mi.json
+**/.mi.token
+**/qr.png
+
+# 网易云 / 大模型凭据
+**/netease.json
+
+# node
+node_modules/

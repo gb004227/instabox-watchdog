@@ -1,0 +1,73 @@
+# 小爱音箱全栈上云 —— 一条命令拉起：bash deploy.sh
+# 控制台 http://<PUBLIC_HOSTNAME>:3000 ｜ xiaomusic http://<PUBLIC_HOSTNAME>:8090
+services:
+  console:
+    build:
+      context: .
+      dockerfile: Dockerfile.console
+    container_name: xm-console
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      YTDLP_BIN: /usr/local/bin/yt-dlp
+      STREAM_BASE: ${STREAM_BASE:-http://console:3000/netease-stream}
+      PUBLIC_HOSTNAME: ${CONSOLE_PUBLIC_URL:-}
+      XIAOMUSIC_URL: http://xiaomusic:8090
+      TZ: Asia/Shanghai
+      # MiGPT 凭据必须从环境注入（config.js 里已不再硬编码任何密钥）
+      MI_USER: ${MI_USER:-}
+      MI_PASS: ${MI_PASS:-}
+      MI_PASS_TOKEN: ${MI_PASS_TOKEN:-}
+      MI_DID: ${MI_DID:-}
+      MI_DID_NAME: ${MI_DID_NAME:-Xiaomi 智能音箱 Pro}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+    volumes:
+      # 歌单单独挂出来：重建镜像不丢，也方便备份/查看
+      - ./data/playlist.json:/app/public/xiaomusic-playlist.json
+      # MiGPT 的小米登录态：挂出来才能在 rebuild 后保留，登录成功后写入的新 token 也不会丢
+      - ./data/migpt/.mi.json:/app/.mi.json
+    ports:
+      # 控制台建议只对自己的 IP 放行；想只走 SSH 隧道就把 CONSOLE_BIND=127.0.0.1 写进 .env
+      - "${CONSOLE_BIND:-0.0.0.0}:3000:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - xmnet
+
+  xiaomusic:
+    build:
+      context: .
+      dockerfile: Dockerfile.xiaomusic
+    container_name: xm-music
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME}
+      MUSIC_PUBLIC_URL: ${MUSIC_PUBLIC_URL:-}
+      PUBLIC_PORT: ${PUBLIC_PORT:-}
+      PLAYLIST_URL: http://console:3000/xiaomusic-playlist.json
+      MI_USER: ${MI_USER}
+      MI_PASS: ${MI_PASS}
+      MI_DID: ${MI_DID:-}
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data/music:/app/music
+      - ./data/conf:/app/conf
+    ports:
+      # 8090 必须公网可达：音箱要靠它拉音频流
+      - "8090:8090"
+    depends_on:
+      - console
+    networks:
+      - xmnet
+
+networks:
+  xmnet:

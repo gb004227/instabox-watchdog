@@ -1,0 +1,40 @@
+name: rebuild service
+
+# 手动触发：机器还在但服务挂了（容器崩了、compose 文件坏了、登录态丢了）
+# 机器被彻底删除后不适用 —— 那会换 machine id 和公网 URL，需要人工重新发布端口
+on:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "强制重新构建镜像（改了 Dockerfile 才需要）"
+        type: boolean
+        default: false
+      wipe_data:
+        description: "删掉 /data/xmcloud 从零重装（会丢歌单）"
+        type: boolean
+        default: false
+
+concurrency:
+  group: instabox-rebuild
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 恢复服务
+        env:
+          INSTABOX_API_KEY: ${{ secrets.INSTABOX_API_KEY }}
+          INSTABOX_MACHINE: ${{ vars.INSTABOX_MACHINE || 'box-1' }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild && '1' || '0' }}
+          WIPE_DATA: ${{ inputs.wipe_data && '1' || '0' }}
+          XIAOMUSIC_AUTH_B64: ${{ secrets.XIAOMUSIC_AUTH_B64 }}
+        run: |
+          chmod +x scripts/rebuild.sh
+          bash scripts/rebuild.sh

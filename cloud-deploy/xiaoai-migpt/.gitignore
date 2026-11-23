@@ -1,0 +1,15 @@
+node_modules/
+
+# 登录凭据，含 serviceToken
+.mi.json
+
+# 网易云 cookie（MUSIC_U 等同账号凭据）
+netease.json
+netease.json.tmp
+
+# 网页面板保存的覆盖配置，可能含 API Key 明文
+runtime.json
+runtime.json.tmp
+
+*.log
+.DS_Store
