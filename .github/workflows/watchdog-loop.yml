@@ -1,0 +1,65 @@
+name: watchdog loop
+
+# 为什么不用 5 分钟一次的 schedule：
+# 实测本仓库的 schedule 触发器完全不执行（cron-probe 也从未触发，累计 0 次），
+# 所以改成「一棒跑近 6 小时，跑完自己派发下一棒」的自接力模式，不依赖 GitHub 的定时器。
+on:
+  workflow_dispatch:
+  # 兜底：万一哪天 GitHub 的 schedule 活了，能自动把链条接上
+  schedule:
+    - cron: "0 */6 * * *"
+
+concurrency:
+  group: instabox-watchdog-loop
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 循环看门狗（约 5 小时 40 分）
+        env:
+          INSTABOX_API_KEY: ${{ secrets.INSTABOX_API_KEY }}
+          INSTABOX_MACHINE: ${{ vars.INSTABOX_MACHINE || 'box-1' }}
+          LEAD_MIN: ${{ vars.LEAD_MIN || '20' }}
+          SETTLE_SEC: ${{ vars.SETTLE_SEC || '90' }}
+        run: |
+          set -o pipefail
+          chmod +x scripts/watchdog.sh
+          END=$(( $(date -u +%s) + 20400 ))
+          echo "本轮接力窗口结束于 $(date -u -d @$END +%Y-%m-%dT%H:%M:%SZ)"
+          while [ "$(date -u +%s)" -lt "$END" ]; do
+            echo "===== 轮次 $(date -u +%H:%M:%SZ) ====="
+            bash scripts/watchdog.sh || echo "!! 本轮失败，不中断，继续下一轮"
+            sleep 300
+          done
+          echo "窗口结束，准备交棒"
+
+      - name: 接力（派发下一棒）
+        if: always()
+        env:
+          CHAIN_TOKEN: ${{ secrets.CHAIN_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          for i in 1 2 3; do
+            CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $CHAIN_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$REPO/actions/workflows/watchdog-loop.yml/dispatches" \
+              -d '{"ref":"main"}')
+            echo "dispatch 第 $i 次 → HTTP $CODE"
+            if [ "$CODE" = "204" ]; then
+              echo "已交棒给下一轮"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "!! 交棒失败，链条断了，需要手动点 Run workflow"
+          exit 1

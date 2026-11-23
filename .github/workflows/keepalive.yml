@@ -1,13 +1,14 @@
-name: instabox keepalive
+name: instabox keepalive（单次手动）
 
-# 每 5 分钟一轮（GitHub 的 cron 最小粒度，高峰期可能延迟 5~15 分钟，对本用途无影响）
+# 只保留手动触发：真正长期跑的是 watchdog-loop.yml 的自接力任务。
+# 这里留一个单次执行的入口，方便随时验证一次状态。
+# 注意：本仓库的 schedule 触发器实测完全不执行，所以这里不放 cron，
+# 免得将来 schedule 突然生效、两个 worker 同时 suspend/start 打架。
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       reset_now:
-        description: "立即重置计时器（主动 suspend + wake）"
+        description: "立即重置计时器（主动 suspend + start）"
         type: boolean
         default: false
 
