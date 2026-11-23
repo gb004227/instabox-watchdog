@@ -80,7 +80,30 @@
 
 ### 4. 启用
 
-Actions 页面确认 `instabox keepalive` 已启用。可以点 `Run workflow` 手动跑一次，勾选 `reset_now` 立刻验证一次完整重置。
+**不要依赖 `schedule` 定时器。** 实测本仓库的 `schedule` 触发器**完全不执行**：
+`cron-probe.yml`（内容只有一行 echo）从 08:53 挂到 09:44，跨过 8 个 `*/5` 时间点，`event=schedule` 的运行数一直是 **0**。
+换成自接力模式：
+
+| 工作流 | 触发 | 作用 |
+|---|---|---|
+| `watchdog-loop.yml` | 手动 + `0 */6 * * *` 兜底 | **真正的 worker**。一棒跑 5 小时 40 分，内部每 5 分钟跑一次 watchdog，跑完用自己的 `CHAIN_TOKEN` 派发下一棒 |
+| `keepalive.yml` | 仅手动 | 单次检查 / 强制重置，调试用 |
+| `rebuild.yml` | 仅手动 | 强制重建镜像或清盘重装 |
+| `keepalive-alive.yml` | 每周 | 保活提交（schedule 不生效时这个也不会跑，但自接力用的是 dispatch，不受 60 天禁用影响） |
+
+所以需要 **第三个 Secret**：
+
+| Secret | 说明 |
+|---|---|
+| `CHAIN_TOKEN` | 带 `repo` + `workflow` 权限的 PAT，只用于「跑完派发下一棒」。链条断了的唯一补救就是手动点一次 `Run workflow` |
+
+### 5. 启动链条
+
+```bash
+gh workflow run watchdog-loop.yml --repo <owner>/<repo>
+```
+
+之后它会自己接下去，不需要再管。
 
 ## 维护
 
@@ -97,7 +120,10 @@ bash scripts/rebuild.sh
 
 ## 已知边界
 
-- **GitHub cron 会延迟**：`*/5 * * * *` 实际可能晚 5~15 分钟。所以 `LEAD_MIN` 给到 20 分钟，而不是贴着上限。
+- **GitHub `schedule` 在本仓库 100% 不触发**（已用 `cron-probe.yml` 证伪，不是延迟）。因此设计成自接力：靠 `workflow_dispatch` 一棒接一棒。
+- **自接力的断点**：如果某一棒的最后一 step 三次派发都失败（`HTTP 204` 才算成功），链条就断了，机器会在 120 分钟后被平台暂停、进入冷却。补救：手动 `Run workflow` 一次。
+- **单棒上限**：GitHub 单个 job 最长 6 小时。这里跑 5 小时 40 分（`END = now + 20400`），`timeout-minutes: 355`。
+- **单棒内的精度**：循环里每 5 分钟一轮，不受 GitHub cron 抖动影响，重置点能卡得很准（100 分钟阈值）。
 - **60 天无活动会自动禁用** scheduled workflow。`keepalive-alive.yml` 每周自动提交一次空的 `last-active` 文件用来续命。
 - **机器被删除后不适用**：新机器有新的 `m_xxx` id，公网 URL 也会变（`8090-<id>.instabox.tech`），需要人工重新 `port publish` 并更新 `.env` 的 `MUSIC_PUBLIC_URL` / `CONSOLE_PUBLIC_URL`。
 - **成本**：public 仓库的 Actions 免费；private 仓库每 5 分钟一次约消耗 1400~1800 分钟/月，接近 2000 分钟上限。
